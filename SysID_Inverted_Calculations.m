@@ -1,6 +1,6 @@
-clear;clc; close all;
+% clear;clc; close all;
 
-load('SysID_Inverted_Data');
+% load('SysID_Inverted_Data');
 
 T = 0.002;
 Fs = 1/T;             % Sampling frequency
@@ -36,6 +36,6 @@ P1 = P2(1:L/2+1);
 f = Fs*(0:(L/2))/L;
 Gfrd = frd(P1,f*2*pi);
 G(2) = fitfrd(Gfrd, 2)
-% bode(Gfrd, G(2), {0.01,50*pi})
+bode(Gfrd, G(2), {0.01,50*pi})
 
 P(2) = (1/G(2) - 1)/C(2);
