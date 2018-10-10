@@ -11,6 +11,7 @@ extern bool startup;  // true the first time the sketch is run after the Arduino
 
 extern unsigned long previousMicros;  // used to store the last time the SPI data was written
 extern const long sampleTime;  // set the sample time (the interval between SPI transactions) to 1000us = 1ms
+extern unsigned long elapsedTime;
 
 // set pin 10 as the slave select for the Quanser QUBE
 // (Note that if a different pin is used for the slave select, pin 10 should be set as
@@ -47,17 +48,44 @@ extern int LEDGreen;
 extern int LEDBlue;
 
 // Setup global variables for wrap up function
-extern float alpha;  // pendulum angle in radians
-extern float theta;  // arm angle in radians
+extern float alpha;  // pendulum angle in radians, 0deg is up, +ve CCW (front view)
+extern float theta;  // arm angle in radians, +ve CCW (top down view)
 extern float currentSense;
 extern int moduleID;
 extern float motorVoltage;
+extern float maxVoltage;
+
+extern float desired[4]; // upright pendulum
+extern float Error[4];
+extern float StateX[4];
+extern float gain[4];
+
+extern float theta_n_k1;
+extern float theta_dot_k1;
+extern float alpha_n_k1;
+extern float alpha_dot_k1;
+
+extern float sin_freq; // Hz
+extern float sin_period; // microseconds
+extern float sin_amp; // V
+
+extern float A[1][1]; // Ctrld = c2d(Ctrl,T, 'foh')
+extern float B[1][2];
+extern float C[1][1];
+extern float D[1][2];
+
+extern float intState;
+extern float intStateOld;
 
 //Setup serial builder
 extern Display displayData;
 
+void calcSetpoints();
 void readSensors();
+void updateStates();
+void calcMotorVoltage();
 void driveMotor();
 void resetQUBEServo();
+//float calcStdDev(const int data[], const int numElms);
 
 #endif

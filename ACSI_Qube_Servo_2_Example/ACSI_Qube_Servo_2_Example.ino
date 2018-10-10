@@ -53,26 +53,19 @@ void loop() {
   unsigned long currentMicros = micros();
   if (currentMicros - previousMicros >= sampleTime) {
     previousMicros = previousMicros + sampleTime;  
-
-  // Simple function for reading from sensors.  Data are read into global variables.  For variable definitions, see ACSI_lib.h.
-  readSensors();
-  // This will define the data that will be displayed at the serial terminal.
-  displayData.buildString(theta, alpha, currentSense, moduleID, moduleStatus);
-
-  //Below demonstrates changing the LED state (you probably don't care) and changing the motor voltage (you certainly DO care)
-  if (theta <= -(20*M_PI/180.0)) {
-    LEDRed = 999;
-    LEDGreen = 0;
-    LEDBlue = 0;
-    motorVoltage = -1.0;
-  } else if (theta >= (20*M_PI/180.0)) {
-    LEDRed = 0;
-    LEDGreen = 0;
-    LEDBlue = 999;
-    motorVoltage = 1.0;
-  }
-  //This command actually writes the data to the Qube servo
-  driveMotor();
+    elapsedTime += sampleTime;
+    if (elapsedTime > (2 * M_PI)*1e6){
+      elapsedTime -= (2 * M_PI)*1e6;
+    }
+    // Simple function for reading from sensors.  Data are read into global variables.  For variable definitions, see ACSI_lib.h.
+    readSensors();
+    // This will define the data that will be displayed at the serial terminal.
+    displayData.buildString(theta, alpha, currentSense, moduleID, moduleStatus);
+  
+    calcSetpoints();
+    updateStates();
+    calcMotorVoltage();
+    driveMotor();
   }
 
   
@@ -84,7 +77,7 @@ void loop() {
     if ( (displayData.dDataReady) && (currentMicros - previousMicros <= (sampleTime - 100)) ) {
       // if there is room available in the serial buffer, print one character
       if(Serial.availableForWrite() > 0) {
-        Serial.print(displayData.dData[displayData.dDataIndex]);
+//        Serial.print(displayData.dData[displayData.dDataIndex]);
         displayData.dDataIndex = displayData.dDataIndex + 1;
         // if the entire string has been printed, clear the flag so a new string can be obtained
         if(displayData.dDataIndex == displayData.dData.length()) {
@@ -94,4 +87,3 @@ void loop() {
     }
   }
 }
-
