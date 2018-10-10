@@ -77,6 +77,16 @@ extern float D[1][2];
 extern float intState;
 extern float intStateOld;
 
+// Input shaping parameters
+extern float IS_A[3];
+extern float IS_delays[3];
+//extern float IS_hist[3]; // IS_hist[i] = current - "i" timesteps
+extern float IS_prop; 
+extern int IS_num_steps_count, IS_num_steps;
+//extern float IS_cmd;
+extern bool IS_setpt_pos, IS_setpt_pos_k1;
+extern float thetaAmp, thetaFreq;
+
 //Setup serial builder
 extern Display displayData;
 
@@ -84,6 +94,7 @@ void calcSetpoints();
 void readSensors();
 void updateStates();
 void calcMotorVoltage();
+//void updateIsHist();
 void driveMotor();
 void resetQUBEServo();
 //float calcStdDev(const int data[], const int numElms);

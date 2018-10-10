@@ -66,7 +66,7 @@ float StateX[4] = {0, 0, 0, 0};
 float A[1][1] = {{0.9048}};
 float B[1][2] = {{1.699, -3.825}};
 float C[1][1] = {{4}};
-float D[1][2] = {{-73.64, 198.4}};
+float D[1][2] = {{ -73.64, 198.4}};
 
 float intState = 0.0;
 float intStateOld = 0.0;
@@ -80,16 +80,43 @@ float sin_freq = 0.2; // Hz
 float sin_period = 1 / sin_freq * 1e6; // microseconds
 float sin_amp = 0.5; // rad
 
+float IS_A[3] = {0.2524, 0.5000, 0.2476}; // update these to real values
+float IS_delays[3] = {0.0 * 1e3, 0.2805 * 1e3, 0.5610 * 1e3}; // update these to real values
+float IS_prop = 0.0; // proportion of the total signal at a given timestep
+int IS_num_steps = 3;
+int IS_num_steps_count = 0;
+//float IS_cmd = 0.0;
+bool IS_setpt_pos = false;
+bool IS_setpt_pos_k1 = false;
+float thetaFreq = 1.0;
+float thetaAmp = PI/6.0;
+long prev_time = millis();
+
 //Setup serial builder
 Display displayData;
 
 void calcSetpoints() {
+  // this section for baseline motor angle control
   // desired[0] is the motor angle
   //  desired[0] = sin_amp * sin(elapsedTime / sin_period * 2 * M_PI); // sine wave
-  desired[0] = 0; // middle
-
+//  desired[0] = 0; // middle
+  
   // show LEDs for debugging
-  LEDRed = (desired[0] * 400) + 500;
+//  LEDRed = (desired[0] * 400) + 500;
+
+//  // IS square wave
+  {
+    IS_setpt_pos_k1 = IS_setpt_pos; // capture it before it gets changed below
+    if ((millis() % (int)((2*PI)/thetaFreq*1000)) <= (int)(PI/thetaFreq*1000)){
+      IS_setpt_pos = true;
+      desired[0] = thetaAmp;
+      LEDBlue = 999;
+    } else {
+      IS_setpt_pos = false;
+      desired[0] = -thetaAmp;
+      LEDBlue = 0;
+    }
+  }
 }
 
 void readSensors() {
@@ -167,30 +194,61 @@ void updateStates() {
 }
 
 void calcMotorVoltage() {
-//  float Out = 0;
-//  for (int it = 0; it < 4; it++) {
-//    Out = Out + Error[it] * gain[it];
-//  }
+  //  float Out = 0;
+  //  for (int it = 0; it < 4; it++) {
+  //    Out = Out + Error[it] * gain[it];
+  //  }
 
-  // y = Cx + Du
-  // Vmotors = C*intState + D*Error
-  float Vmotor = 0.0;
-  Vmotor += C[0][0]*intState;
-  Vmotor += D[0][0]*Error[0] + D[0][1]*Error[1];
-
-  // x = Ax + Bu
-  // intState = A*intStateOld + B*Error
-  float intState = 0.0;
-  intState += A[0][0]*intStateOld;
-  intState += B[0][0]*Error[0] + B[0][1]*Error[1];
-  intStateOld = intState;
-
-  Serial.println(Vmotor);
+  { // state space controller
+    // y = Cx + Du
+    // Vmotors = C*intState + D*Error
+    float Vmotor = 0.0;
+    Vmotor += C[0][0] * intState;
+    Vmotor += D[0][0] * Error[0] + D[0][1] * Error[1];
   
-  motorVoltage = 0*Vmotor;
+    // x = Ax + Bu
+    // intState = A*intStateOld + B*Error
+    float intState = 0.0;
+    intState += A[0][0] * intStateOld;
+    intState += B[0][0] * Error[0] + B[0][1] * Error[1];
+    intStateOld = intState;
+    
+    motorVoltage = 0 * Vmotor;
+//    Serial.println(Vmotor);
+  }
 
-  if (motorVoltage > maxVoltage) motorVoltage = maxVoltage;
-  if (motorVoltage < -maxVoltage) motorVoltage = -maxVoltage;
+  { // apply voltage limits
+    if (motorVoltage > maxVoltage) motorVoltage = maxVoltage;
+    if (motorVoltage < -maxVoltage) motorVoltage = -maxVoltage;
+  }
+
+  { // this section for input shaping
+//    static long start_time = millis();
+    long time_since_step = millis() - prev_time;
+//    Serial.print(time_since_step);
+//    Serial.print(" ");
+//    Serial.println(IS_delays[1]);
+    if(IS_setpt_pos != IS_setpt_pos_k1){ // if the setpoint has changed between this timestep and the last
+        // reset everything
+        IS_prop = IS_A[0];
+        time_since_step = 0;
+        prev_time = millis(); // update timer to now
+//        Serial.println("new step");
+    } else {
+        if (time_since_step >= IS_delays[0] && time_since_step < IS_delays[1]){
+//          Serial.println("step 1");
+          IS_prop = IS_A[0];
+        } else if (time_since_step >= IS_delays[1] && time_since_step < IS_delays[2]){
+//          Serial.println("step 2");
+          IS_prop = IS_A[0] + IS_A[1];          
+        } else {
+//          Serial.println("step 3");
+          IS_prop = IS_A[0] + IS_A[1] + IS_A[2]; // should be 1.0
+        }
+    }
+//    Serial.println(IS_prop);
+    motorVoltage = desired[0] * IS_prop * 0; // may need to include a gain
+  }
 }
 
 void driveMotor() {
