@@ -77,12 +77,12 @@ void loop() {
     if ( (displayData.dDataReady) && (currentMicros - previousMicros <= (sampleTime - 100)) ) {
       // if there is room available in the serial buffer, print one character
       if(Serial.availableForWrite() > 0) {
-//        { // this block prints out the arm and pendulum angles. use for capturing data output
-//          Serial.print("th:");
-//          Serial.print(theta);
-//          Serial.print(" al:");
-//          Serial.println(alpha);
-//        }
+        { // this block prints out the arm and pendulum angles. use for capturing data output
+//            Serial.print("th:");
+//            Serial.print(theta);
+//            Serial.print(" al:");
+//            Serial.println(alpha);
+        }
           {
 //            Serial.print(elapsedTime);
 //            Serial.print(" ");

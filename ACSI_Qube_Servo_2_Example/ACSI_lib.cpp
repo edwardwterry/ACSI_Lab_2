@@ -62,12 +62,16 @@ float desired[4] = {0, 0, 0, 0}; // upright pendulum
 float Error[4] = {0, 0, 0, 0};
 float StateX[4] = {0, 0, 0, 0};
 //float gain[4] = { -2.2361, 37.6175, -1.5005, 3.3789};
+float gain[4] = { -1.0000 ,  34.3222,   -1.2260,    3.0784};
 
-float A[1][1] = {{0.9048}};
-float B[1][2] = {{1.699, -3.825}};
-float C[1][1] = {{4}};
-float D[1][2] = {{ -73.64, 198.4}};
-
+//float A[1][1] = {{0.9048}};
+//float B[1][2] = {{1.699, -3.825}};
+//float C[1][1] = {{4}};
+//float D[1][2] = {{ -73.64, 198.4}};
+float A[1][1] = {{-50.0}};
+float B[1][2] = {{29.31, -65.99}};
+float C[1][1] = {{128}};
+float D[1][2] = {{ -7727, 206.6}};
 float intState = 0.0;
 float intStateOld = 0.0;
 
@@ -80,17 +84,20 @@ float sin_freq = 0.2; // Hz
 float sin_period = 1 / sin_freq * 1e6; // microseconds
 float sin_amp = 0.5; // rad
 
-float IS_A[3] = {0.2524, 0.5000, 0.2476}; // update these to real values
-float IS_delays[3] = {0.0 * 1e3, 0.2805 * 1e3, 0.5610 * 1e3}; // update these to real values
+float IS_A[3] = {0.2524, 0.5000, 0.2476};
+float IS_delays[3] = {0.0 * 1e3, 0.2805 * 1e3, 0.5610 * 1e3}; // milliseconds
 float IS_prop = 0.0; // proportion of the total signal at a given timestep
-int IS_num_steps = 3;
-int IS_num_steps_count = 0;
+
 //float IS_cmd = 0.0;
 bool IS_setpt_pos = false;
 bool IS_setpt_pos_k1 = false;
 float thetaFreq = 1.0;
-float thetaAmp = PI/6.0;
+float thetaAmp = PI/4.0;
 long prev_time = millis();
+
+float P_cl_is = -1.0;
+float D_cl_is = .05;
+float theta_err_k1 = 0.0;
 
 //Setup serial builder
 Display displayData;
@@ -104,7 +111,7 @@ void calcSetpoints() {
   // show LEDs for debugging
 //  LEDRed = (desired[0] * 400) + 500;
 
-//  // IS square wave
+//   IS square wave
   {
     IS_setpt_pos_k1 = IS_setpt_pos; // capture it before it gets changed below
     if ((millis() % (int)((2*PI)/thetaFreq*1000)) <= (int)(PI/thetaFreq*1000)){
@@ -162,11 +169,14 @@ void readSensors() {
   }
   // wrap the pendulum encoder counts when the pendulum is rotated more than 360 degrees
   encoder1 = encoder1 % 2048;
-  if (encoder1 < 0) {
-    encoder1 = 2048 + encoder1;
-  }
+//  if (encoder1 < 0) {
+//    encoder1 = 2048 + encoder1;
+//  }
+  if (encoder1 > 1024) {
+    encoder1 = -2048 + encoder1;
+  }     
   // convert the pendulum encoder counts to angle alpha in radians
-  alpha = (float)encoder1 * (2.0 * M_PI / 2048) - M_PI;
+  alpha = (float)encoder1 * (2.0 * M_PI / 2048);// - M_PI;
 
   /*Current Sense Value*/
   currentSense = (currentSenseMSB << 8) | currentSenseLSB;
@@ -177,13 +187,13 @@ void updateStates() {
   StateX[1] = alpha;
 
   float theta_n = theta;
-  float theta_dot = (46 * theta_n) - (46 * theta_n_k1) + (0.839 * theta_dot_k1);
+  float theta_dot = (47.58 * theta_n) - (47.58 * theta_n_k1) + (0.9048 * theta_dot_k1);
   StateX[2] = theta_dot;
   theta_n_k1 = theta_n;
   theta_dot_k1 = theta_dot;
 
   float alpha_n = alpha;
-  float alpha_dot = (46 * alpha_n) - (46 * alpha_n_k1) + (0.839 * alpha_dot_k1);
+  float alpha_dot = (47.58 * alpha_n) - (47.58 * alpha_n_k1) + (0.9048 * alpha_dot_k1);
   StateX[3] = alpha_dot;
   alpha_n_k1 = alpha_n;
   alpha_dot_k1 = alpha_dot;
@@ -191,63 +201,71 @@ void updateStates() {
   for (int i = 0; i < 4; i++) {
     Error[i] = desired[i] - StateX[i];
   }
+
+
 }
 
 void calcMotorVoltage() {
-  //  float Out = 0;
-  //  for (int it = 0; it < 4; it++) {
-  //    Out = Out + Error[it] * gain[it];
-  //  }
+    float Out = 0;
+    for (int it = 0; it < 4; it++) {
+      Out = Out + Error[it] * gain[it];
+    }
+    motorVoltage = -1.0 * Out;
 
-  { // state space controller
-    // y = Cx + Du
-    // Vmotors = C*intState + D*Error
-    float Vmotor = 0.0;
-    Vmotor += C[0][0] * intState;
-    Vmotor += D[0][0] * Error[0] + D[0][1] * Error[1];
-  
-    // x = Ax + Bu
-    // intState = A*intStateOld + B*Error
-    float intState = 0.0;
-    intState += A[0][0] * intStateOld;
-    intState += B[0][0] * Error[0] + B[0][1] * Error[1];
-    intStateOld = intState;
-    
-    motorVoltage = 0 * Vmotor;
-//    Serial.println(Vmotor);
-  }
+//  { // state space controller
+//    // y = Cx + Du
+//    // Vmotors = C*intState + D*Error
+//    float Vmotor = 0.0;
+//    Vmotor += C[0][0] * intState;
+//    Vmotor += D[0][0] * Error[0] + D[0][1] * Error[1];
+//  
+//    // x = Ax + Bu
+//    // intState = A*intStateOld + B*Error
+//    float intState = 0.0;
+//    intState += A[0][0] * intStateOld;
+//    intState += B[0][0] * Error[0] + B[0][1] * Error[1];
+//    intStateOld = intState;
+//    
+//    motorVoltage = 0.0 * Vmotor;
+////    Serial.println(Vmotor);
+//  }
+
+
+
+//  { // this section for OPEN LOOP input shaping
+////    static long start_time = millis();
+//    long time_since_step = millis() - prev_time;
+//    if(IS_setpt_pos != IS_setpt_pos_k1){ // if the setpoint has changed between this timestep and the last
+//        IS_prop = IS_A[0];
+//        prev_time = millis(); // update timer to now
+//    } else {
+//        if (time_since_step >= IS_delays[0] && time_since_step < IS_delays[1]){
+//          IS_prop = IS_A[0];
+//        } else if (time_since_step >= IS_delays[1] && time_since_step < IS_delays[2]){
+//          IS_prop = IS_A[0] + IS_A[1];          
+//        } else {
+//          IS_prop = IS_A[0] + IS_A[1] + IS_A[2]; // should be 1.0
+//        }
+//    }
+////    Serial.println(IS_prop);
+//    motorVoltage = desired[0] * IS_prop; // may need to include a gain
+////    motorVoltage = desired[0];// * IS_prop; // may need to include a gain
+//  }
+
+//  { // CLOSED LOOP input shaping
+//    // PID for just arm angle
+//    motorVoltage = 0.0;
+//    // deriv of error
+//    
+//    motorVoltage += P_cl_is * Error[0];
+//    
+//    motorVoltage += D_cl_is * Error[2];
+////    theta_err_k1 = Error[0];
+//  }
 
   { // apply voltage limits
     if (motorVoltage > maxVoltage) motorVoltage = maxVoltage;
     if (motorVoltage < -maxVoltage) motorVoltage = -maxVoltage;
-  }
-
-  { // this section for input shaping
-//    static long start_time = millis();
-    long time_since_step = millis() - prev_time;
-//    Serial.print(time_since_step);
-//    Serial.print(" ");
-//    Serial.println(IS_delays[1]);
-    if(IS_setpt_pos != IS_setpt_pos_k1){ // if the setpoint has changed between this timestep and the last
-        // reset everything
-        IS_prop = IS_A[0];
-        time_since_step = 0;
-        prev_time = millis(); // update timer to now
-//        Serial.println("new step");
-    } else {
-        if (time_since_step >= IS_delays[0] && time_since_step < IS_delays[1]){
-//          Serial.println("step 1");
-          IS_prop = IS_A[0];
-        } else if (time_since_step >= IS_delays[1] && time_since_step < IS_delays[2]){
-//          Serial.println("step 2");
-          IS_prop = IS_A[0] + IS_A[1];          
-        } else {
-//          Serial.println("step 3");
-          IS_prop = IS_A[0] + IS_A[1] + IS_A[2]; // should be 1.0
-        }
-    }
-//    Serial.println(IS_prop);
-    motorVoltage = desired[0] * IS_prop * 0; // may need to include a gain
   }
 }
 

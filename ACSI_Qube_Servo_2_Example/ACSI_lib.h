@@ -74,6 +74,8 @@ extern float B[1][2];
 extern float C[1][1];
 extern float D[1][2];
 
+extern float P_cl_is, D_cl_is, theta_err_k1;
+
 extern float intState;
 extern float intStateOld;
 
