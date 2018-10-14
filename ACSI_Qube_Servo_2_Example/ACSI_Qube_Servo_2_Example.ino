@@ -24,6 +24,9 @@ www.cmu.edu
 #include <SPI.h>
 #include <math.h>
 
+// include the ILC commands
+//#include "u_ilc.h"
+
 // Don't touch the setup unless you decide to use interrupts
 void setup() {
   // set the slaveSelectPin as an output

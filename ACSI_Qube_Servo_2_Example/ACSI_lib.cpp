@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include "QUBEServo.h"
 #include "ACSI_lib.h"
+#include "u_ilc.h"
 #include <SPI.h>
 #include <math.h>
 
@@ -80,50 +81,50 @@ float theta_dot_k1 = 0;
 float alpha_n_k1 = 0;
 float alpha_dot_k1 = 0;
 
-float sin_freq = 0.2; // Hz
+float sin_freq = 1/(2*PI); // Hz
 float sin_period = 1 / sin_freq * 1e6; // microseconds
-float sin_amp = 0.5; // rad
+float sin_amp = 1; // rad
 
 float IS_A[3] = {0.2524, 0.5000, 0.2476};
 float IS_delays[3] = {0.0 * 1e3, 0.2805 * 1e3, 0.5610 * 1e3}; // milliseconds
 float IS_prop = 0.0; // proportion of the total signal at a given timestep
 
-//float IS_cmd = 0.0;
 bool IS_setpt_pos = false;
 bool IS_setpt_pos_k1 = false;
-float thetaFreq = 1.0;
-float thetaAmp = PI/4.0;
+float thetaFreq = 0.5; // i changed this and forgot the original
+float thetaAmp = PI/6.0;//1.0;
 long prev_time = millis();
 
-float P_cl_is = -1.0;
-float D_cl_is = .05;
+float P_cl_is = -2.0; // successful 10/12 with -1.0. -6.0 for CL IS
+float D_cl_is = -0.75; // successful 10/12 with -0.12. -0.75 for CL IS
 float theta_err_k1 = 0.0;
+
+int timestep = 0;
 
 //Setup serial builder
 Display displayData;
 
 void calcSetpoints() {
-  // this section for baseline motor angle control
   // desired[0] is the motor angle
-  //  desired[0] = sin_amp * sin(elapsedTime / sin_period * 2 * M_PI); // sine wave
-//  desired[0] = 0; // middle
+  { // sine wave for pendulum down ILC control
+    desired[0] = sin_amp * sin(elapsedTime / sin_period * 2 * M_PI); // sine wave
+  }
   
   // show LEDs for debugging
-//  LEDRed = (desired[0] * 400) + 500;
+  LEDRed = (desired[0] * 400) + 500;
 
-//   IS square wave
-  {
-    IS_setpt_pos_k1 = IS_setpt_pos; // capture it before it gets changed below
-    if ((millis() % (int)((2*PI)/thetaFreq*1000)) <= (int)(PI/thetaFreq*1000)){
-      IS_setpt_pos = true;
-      desired[0] = thetaAmp;
-      LEDBlue = 999;
-    } else {
-      IS_setpt_pos = false;
-      desired[0] = -thetaAmp;
-      LEDBlue = 0;
-    }
-  }
+//  { // IS square wave
+//    IS_setpt_pos_k1 = IS_setpt_pos; // capture it before it gets changed below
+//    if ((millis() % (int)((2*PI)/thetaFreq*1000)) <= (int)(PI/thetaFreq*1000)){
+//      IS_setpt_pos = true;
+//      desired[0] = thetaAmp;
+//      LEDBlue = 999;
+//    } else {
+//      IS_setpt_pos = false;
+//      desired[0] = -thetaAmp;
+//      LEDBlue = 0;
+//    }
+//  }
 }
 
 void readSensors() {
@@ -168,15 +169,16 @@ void readSensors() {
     encoder1 = encoder1 | 0xFF000000;
   }
   // wrap the pendulum encoder counts when the pendulum is rotated more than 360 degrees
-  encoder1 = encoder1 % 2048;
-//  if (encoder1 < 0) {
+  encoder1 = encoder1 % 2048;  
+//  if (encoder1 < 0) { // this one for down
 //    encoder1 = 2048 + encoder1;
 //  }
-  if (encoder1 > 1024) {
+  if (encoder1 > 1024) {  // this one for up
     encoder1 = -2048 + encoder1;
   }     
   // convert the pendulum encoder counts to angle alpha in radians
-  alpha = (float)encoder1 * (2.0 * M_PI / 2048);// - M_PI;
+//  alpha = (float)encoder1 * (2.0 * M_PI / 2048) - M_PI; // this one for down
+  alpha = (float)encoder1 * (2.0 * M_PI / 2048);// - M_PI;  // this one for up
 
   /*Current Sense Value*/
   currentSense = (currentSenseMSB << 8) | currentSenseLSB;
@@ -201,39 +203,18 @@ void updateStates() {
   for (int i = 0; i < 4; i++) {
     Error[i] = desired[i] - StateX[i];
   }
-
-
 }
 
 void calcMotorVoltage() {
-    float Out = 0;
-    for (int it = 0; it < 4; it++) {
-      Out = Out + Error[it] * gain[it];
-    }
-    motorVoltage = -1.0 * Out;
+  motorVoltage = 0.0;
+// vanilla inverted control
+//    float Out = 0;
+//    for (int it = 0; it < 4; it++) {
+//      Out = Out + Error[it] * gain[it];
+//    }
+//    motorVoltage = -1.0 * Out;
 
-//  { // state space controller
-//    // y = Cx + Du
-//    // Vmotors = C*intState + D*Error
-//    float Vmotor = 0.0;
-//    Vmotor += C[0][0] * intState;
-//    Vmotor += D[0][0] * Error[0] + D[0][1] * Error[1];
-//  
-//    // x = Ax + Bu
-//    // intState = A*intStateOld + B*Error
-//    float intState = 0.0;
-//    intState += A[0][0] * intStateOld;
-//    intState += B[0][0] * Error[0] + B[0][1] * Error[1];
-//    intStateOld = intState;
-//    
-//    motorVoltage = 0.0 * Vmotor;
-////    Serial.println(Vmotor);
-//  }
-
-
-
-//  { // this section for OPEN LOOP input shaping
-////    static long start_time = millis();
+//  { // input shaping steps
 //    long time_since_step = millis() - prev_time;
 //    if(IS_setpt_pos != IS_setpt_pos_k1){ // if the setpoint has changed between this timestep and the last
 //        IS_prop = IS_A[0];
@@ -247,20 +228,31 @@ void calcMotorVoltage() {
 //          IS_prop = IS_A[0] + IS_A[1] + IS_A[2]; // should be 1.0
 //        }
 //    }
-////    Serial.println(IS_prop);
-//    motorVoltage = desired[0] * IS_prop; // may need to include a gain
-////    motorVoltage = desired[0];// * IS_prop; // may need to include a gain
-//  }
+//
+    { // input shaping off ONLY (for both open and closed loop)
+      IS_prop = 1.0;
+    }
 
-//  { // CLOSED LOOP input shaping
-//    // PID for just arm angle
-//    motorVoltage = 0.0;
-//    // deriv of error
-//    
-//    motorVoltage += P_cl_is * Error[0];
-//    
-//    motorVoltage += D_cl_is * Error[2];
-////    theta_err_k1 = Error[0];
+    { // closed loop pendulum down control
+      Error[0] = desired[0] * IS_prop - StateX[0];
+      motorVoltage += P_cl_is * Error[0];
+      motorVoltage += D_cl_is * Error[2];      
+    }
+
+//    { // open loop pendulum down control
+//      motorVoltage = desired[0] * IS_prop; // ONLY this line for OL IS
+//    }
+
+
+    if (timestep<=5001){
+      unsigned char u_ilc_temp = pgm_read_byte_near(u + timestep);
+      float u_ilc = u_ilc_temp * resolution + (min_u_ilc);
+      motorVoltage += u_ilc; // turn on for ILC
+      timestep++;
+      Serial.print(desired[0]);
+      Serial.print(" ");
+      Serial.println(StateX[0]);
+    }
 //  }
 
   { // apply voltage limits
@@ -352,17 +344,3 @@ void resetQUBEServo() {
   writeMask = B00011111;  // enable the motor and LEDs, disable writes to the encoders
   motorMSB = 0x80;  // enable the amplifier
 }
-
-//float calcStdDev(const int data[], const int numElms){
-//  float sum = 0;
-//  for (int i = 0; i < numElms; i++){
-//    sum += data[i];
-//  }
-//  float mean = sum/numElms;
-//  float dev = 0;
-//  for (int i = 0; i < numElms; i++){
-//    dev += pow((data[i] - mean), 2);
-//  }
-//  float std = sqrt(dev / numElms);
-//  return std;
-//}
